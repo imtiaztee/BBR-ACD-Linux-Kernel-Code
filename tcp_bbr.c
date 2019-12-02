@@ -409,54 +409,30 @@ static u32 bbr_target_cwnd(struct sock *sk, u32 bw, int gain)
  * when at least a packet is lost and
  * true congestion is true
  */
-static bool bbr_set_cwnd_to_recover_or_restore(
-   struct sock *sk, const struct rate_sample *rs, u32 acked, u32 *new_cwnd, u32 bw)
-{
-   struct tcp_sock *tp = tcp_sk(sk);
-   struct bbr *bbr = inet_csk_ca(sk);
-   u8 prev_state = bbr->prev_ca_state, state = inet_csk(sk)->icsk_ca_state;
-   u32 cwnd = tp->snd_cwnd;
-
-    if (rs->losses > 0)
-       cwnd = max_t(s32, cwnd - rs->losses, 1);
-
-    if (bbr_probe_congestion (sk, rs) && state == TCP_CA_Recovery)  //check that is it actual congestion or not, if so, then half the cwnd
-    {
-        u32 target_cwnd = bbr_target_cwnd(sk, bw, 1);
-
-        if (state == TCP_CA_Recovery && prev_state != TCP_CA_Recovery)
-        {
-    		bbr->packet_conservation = 1;
-     		bbr->next_rtt_delivered = tp->delivered;
-     		cwnd = cwnd - acked;
-        }
-
-        cwnd = max(cwnd + acked, tcp_packets_in_flight(tp) + acked);
-        cwnd = min(cwnd/2, target_cwnd);
-        cwnd = max(cwnd, bbr_cwnd_min_target);
-        *new_cwnd = cwnd;
-
-        //printk (KERN_DEBUG "imtiaz's implementation accessed, cwnd halved! \n");
-        bbr->prev_ca_state = state;
-        return true;
-    }
-
-   if (prev_state >= TCP_CA_Recovery && state < TCP_CA_Recovery)
-   {
-      	bbr->restore_cwnd = 1;
-    	bbr->packet_conservation = 0;
-        bbr->prev_ca_state = state;
-   }
-
-   if (bbr->restore_cwnd)
-   {
-      cwnd = max(cwnd, bbr->prior_cwnd);
-      bbr->restore_cwnd = 0;
-   }
-
-   //printk (KERN_DEBUG "no limit applied! \n");
-   *new_cwnd = cwnd;
-   return false;
+static bool bbr_set_cwnd_to_recover_or_restore(struct sock *sk, const struct rate_sample *rs, u32 acked, u32 *new_cwnd, u32 bw) {
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct bbr *bbr = inet_csk_ca(sk);
+	u8 prev_state = bbr->prev_ca_state;
+	u8 state = inet_csk(sk)->icsk_ca_state;
+	u32 cwnd = tp->snd_cwnd;
+	if (rs->losses > 0)
+		cwnd = max_t(s32, cwnd - rs->losses, 1);
+	if (bbr_probe_congestion (sk, rs) && state == TCP_CA_Recovery && prev_state != TCP_CA_Recovery) {
+		bbr->packet_conservation = 1;
+		bbr->next_rtt_delivered = tp->delivered;
+	} else if (prev_state >= TCP_CA_Recovery && state < TCP_CA_Recovery) {
+		cwnd = max(cwnd, bbr->prior_cwnd);
+		bbr->packet_conservation = 0;
+	}
+	bbr->prev_ca_state = state;
+	if (bbr->packet_conservation) {
+        u32 target_cwnd = bbr_target_cwnd(sk, bw, BBR_UNIT);
+	cwnd = min(cwnd/2, target_cwnd);
+	*new_cwnd = max(cwnd, bbr_cwnd_min_target);
+	return true;
+	}
+	*new_cwnd = cwnd;
+	return false;
 }
 
 /* Slow-start up toward target cwnd (if bw estimate is growing, or packet loss
