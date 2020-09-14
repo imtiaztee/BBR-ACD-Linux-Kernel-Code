@@ -14,8 +14,8 @@ Change the default Congestion Algorithm to bbr
 
 ********************************************************
 
-Thanks.
-Imtiaz Mahmud.
+Thanks and regards. <br />
+Dr. Imtiaz Mahmud.
 
 ********************************************************
 For any inquiry, please contact at imtiaz.tee@gmail.com.
